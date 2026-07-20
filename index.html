@@ -55,7 +55,6 @@
             opacity: 0.95;
         }
 
-        /* 電腦端併欄 / 手機端自動轉直欄 */
         .top-panels {
             display: grid;
             grid-template-columns: 1fr 1.2fr;
@@ -65,7 +64,7 @@
 
         @media (max-width: 768px) {
             .top-panels {
-                grid-template-columns: 1fr; /* 手機上切換為單欄直排 */
+                grid-template-columns: 1fr;
             }
         }
 
@@ -112,7 +111,7 @@
             border-bottom: 1px solid var(--border-color);
             margin-bottom: 6px;
             gap: 2px;
-            overflow-x: auto; /* 避免手機上頁籤過長溢出 */
+            overflow-x: auto;
             white-space: nowrap;
         }
 
@@ -194,7 +193,7 @@
         }
 
         .table-responsive {
-            overflow-x: auto; /* 表格可在手機上水平滑動 */
+            overflow-x: auto;
             -webkit-overflow-scrolling: touch;
         }
 
@@ -281,7 +280,6 @@
             cursor: pointer;
         }
 
-        /* 網格卡片在手機上自動縮為 2 個一排 */
         .meter-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -291,7 +289,7 @@
 
         @media (max-width: 600px) {
             .meter-grid {
-                grid-template-columns: repeat(2, 1fr); /* 手機端兩列呈現 */
+                grid-template-columns: repeat(2, 1fr);
             }
         }
 
@@ -326,9 +324,9 @@
     <div class="top-panels">
         <div class="panel-card upload-section" id="drop-zone">
             <div>
-                <label for="csv-file" class="file-input-label">手動匯入 / 切換 CSV</label>
+                <label for="csv-file" class="file-input-label">手動選擇 / 切換 CSV 檔案</label>
                 <input type="file" id="csv-file" accept=".csv">
-                <div class="file-info" id="file-info">嘗試讀取預設 data.csv 中...</div>
+                <div class="file-info" id="file-info">嘗試讀取同目錄下的預設 data.csv 中...</div>
             </div>
         </div>
 
@@ -343,7 +341,7 @@
                 <div class="control-item" id="filter-select-container">
                     <label id="filter-label" for="filter-select">篩選類別：</label>
                     <select id="filter-select" onchange="renderAnalysisTable()">
-                        <option value="">載入中...</option>
+                        <option value="">請匯入檔案...</option>
                     </select>
                 </div>
                 <div class="control-item" id="year-mode-container">
@@ -389,7 +387,6 @@
     let currentMode = 'category'; 
     let detailDataStore = {};
 
-    // 網頁載入時，自動嘗試讀取同目錄下的預設 data.csv 檔案
     window.addEventListener('DOMContentLoaded', () => {
         fetch('data.csv')
             .then(response => {
@@ -397,7 +394,6 @@
                 return response.arrayBuffer();
             })
             .then(buffer => {
-                // 自動解碼（UTF-8 或 Big5）
                 let decoder = new TextDecoder('utf-8');
                 let text = decoder.decode(buffer);
                 if (text.includes('')) {
@@ -408,7 +404,7 @@
                 processCSV(text);
             })
             .catch(err => {
-                document.getElementById('file-info').textContent = "請點擊上方按鈕選擇匯入 CSV 檔案";
+                document.getElementById('file-info').textContent = "未找到同目錄下 data.csv，請點擊上方按鈕選擇 CSV 檔案";
             });
     });
 
@@ -416,25 +412,41 @@
         const file = e.target.files[0];
         if (!file) return;
         document.getElementById('file-info').textContent = "已載入：" + file.name;
+        
         const reader = new FileReader();
-        reader.onload = (evt) => processCSV(evt.target.result);
+        reader.onload = function(evt) {
+            const text = evt.target.result;
+            if (text.includes('')) {
+                const big5Reader = new FileReader();
+                big5Reader.onload = (bEvt) => processCSV(bEvt.target.result);
+                big5Reader.readAsText(file, 'Big5');
+            } else {
+                processCSV(text);
+            }
+        };
         reader.readAsText(file, 'UTF-8');
     });
 
     function processCSV(text) {
         const lines = text.split(/\r?\n/);
-        if (lines.length < 3) return;
-
-        const headers = parseCSVLine(lines[2]).map(h => h.trim());
-        const meterNoIdx = headers.indexOf("表號");
-        const expiryIdx = headers.indexOf("有效期限");
-        const categoryIdx = headers.indexOf("類別");
-        const remarkIdx = headers.indexOf("備註");
-
-        if (meterNoIdx === -1 || expiryIdx === -1 || categoryIdx === -1 || remarkIdx === -1) {
-            alert("CSV 格式不符！請確保第三列包含【表號】、【有效期限】、【類別】與【備註】");
+        if (lines.length < 3) {
+            alert('檔案列數不足（標題應位於第三列）');
             return;
         }
+
+        // 解析第三列標題
+        const headers = parseCSVLine(lines[2]).map(h => h.trim());
+        
+        // 彈性搜尋標題索引，若找不到則採用預設位置 (0:表號, 5:有效期限, 6:類別, 9:備註)
+        let meterNoIdx = headers.findIndex(h => h.includes("表"));
+        let expiryIdx = headers.findIndex(h => h.includes("期限") || h.includes("有效"));
+        let categoryIdx = headers.findIndex(h => h.includes("類"));
+        let remarkIdx = headers.findIndex(h => h.includes("備註") || h.includes("註"));
+
+        if (meterNoIdx === -1) meterNoIdx = 0;
+        if (expiryIdx === -1) expiryIdx = 5;
+        if (categoryIdx === -1) categoryIdx = 6;
+        if (remarkIdx === -1) remarkIdx = 9;
 
         parsedRows = [];
         categories.clear();
@@ -443,8 +455,7 @@
         for (let i = 3; i < lines.length; i++) {
             if (!lines[i].trim()) continue;
             const cells = parseCSVLine(lines[i]);
-            if (cells.length <= Math.max(meterNoIdx, expiryIdx, categoryIdx, remarkIdx)) continue; 
-
+            
             const meterNo = cells[meterNoIdx]?.trim() || ''; 
             const expiry = cells[expiryIdx]?.trim() || '';  
             const category = cells[categoryIdx]?.trim() || '未分類'; 
@@ -570,7 +581,7 @@
         const isRepairMode = (selectedValue && selectedValue.includes('待修表'));
         
         const hintMsg = document.getElementById('split-hint-msg');
-        if (isAllMode) hintMsg.textContent = "※ 格式「一般可用 + 遺失」（排除待報銷、待修）";
+        if (isAllMode) hintMsg.textContent = "※ 格式「一般可用 + 遺失」（已排除待報銷、待修）";
         else if (isRepairMode) hintMsg.textContent = "※ 格式「一般待修 + 檢校」";
         else hintMsg.textContent = "";
 
@@ -646,7 +657,7 @@
 
     function renderStorageTable() {
         detailDataStore = {};
-        document.getElementById('split-hint-msg').textContent = "※ 庫位模式（排除待報銷、待修）";
+        document.getElementById('split-hint-msg').textContent = "※ 庫位模式（已排除待報銷、待修表）";
 
         const filteredRows = parsedRows.filter(r => r.category && !r.category.includes('待報銷') && !r.category.includes('待修表'));
         const sortedExpiryYears = Array.from(new Set(filteredRows.map(r => r.expiryYear))).sort();
