@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>水表庫存分析</title>
+    <style>
+        :root {
+            --primary-color: #1a5276;
+            --secondary-color: #2980b9;
+            --background-color: #f4f6f7;
+            --card-background: #ffffff;
+            --text-color: #2c3e50;
+            --border-color: #bdc3c7;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
+        }
+
+        body {
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.4;
+            padding: 8px;
+            font-size: 13px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 10px;
+            padding: 10px 8px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        header h1 {
+            font-size: 22px;
+            margin-bottom: 4px;
+            font-weight: bold;
+        }
+
+        header p {
+            font-size: 13px;
+            opacity: 0.95;
+        }
+
+        /* 電腦端併欄 / 手機端自動轉直欄 */
+        .top-panels {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .top-panels {
+                grid-template-columns: 1fr; /* 手機上切換為單欄直排 */
+            }
+        }
+
+        .panel-card {
+            background: var(--card-background);
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .upload-section {
+            border: 2px dashed var(--border-color);
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .file-input-label {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: var(--secondary-color);
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        #csv-file {
+            display: none;
+        }
+
+        .file-info {
+            margin-top: 4px;
+            font-size: 11px;
+            color: #7f8c8d;
+        }
+
+        .tab-buttons {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 6px;
+            gap: 2px;
+            overflow-x: auto; /* 避免手機上頁籤過長溢出 */
+            white-space: nowrap;
+        }
+
+        .tab-btn {
+            padding: 6px 8px;
+            border: none;
+            background: none;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #7f8c8d;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+        }
+
+        .tab-btn.active {
+            color: var(--secondary-color);
+            border-bottom-color: var(--secondary-color);
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .control-item {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        label {
+            font-weight: bold;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        select {
+            flex: 1;
+            padding: 6px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: white;
+            font-size: 15px;
+        }
+
+        .results-section {
+            background: var(--card-background);
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border: 1px solid var(--border-color);
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            border-bottom: 1px solid var(--background-color);
+            padding-bottom: 4px;
+        }
+
+        .results-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .stats-badge {
+            background-color: #ebf5fb;
+            color: var(--primary-color);
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .table-responsive {
+            overflow-x: auto; /* 表格可在手機上水平滑動 */
+            -webkit-overflow-scrolling: touch;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 15px;
+        }
+
+        th {
+            background-color: var(--primary-color);
+            color: white;
+            font-weight: bold;
+            padding: 8px 10px;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        table tbody tr td:first-child {
+            font-size: 16px;
+            font-weight: bold;
+            color: #1a5276;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+
+        .diagonal-header {
+            position: relative;
+            background: linear-gradient(to top right, rgba(255,255,255,0) 49%, rgba(189,195,199,0.8) 50%, rgba(255,255,255,0) 51%) !important;
+            background-color: var(--primary-color) !important;
+            width: 110px;
+            min-width: 110px;
+            height: 42px;
+            padding: 0 !important;
+        }
+
+        .diagonal-header .top-right {
+            position: absolute;
+            top: 2px;
+            right: 4px;
+            font-size: 11px;
+            color: white;
+        }
+
+        .diagonal-header .bottom-left {
+            position: absolute;
+            bottom: 2px;
+            left: 4px;
+            font-size: 11px;
+            color: white;
+        }
+
+        .clickable-link {
+            color: var(--secondary-color);
+            text-decoration: underline;
+            cursor: pointer;
+            font-weight: bold;
+            padding: 4px 8px;
+            display: inline-block;
+        }
+
+        .detail-view {
+            display: none;
+            background: var(--card-background);
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-back {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* 網格卡片在手機上自動縮為 2 個一排 */
+        .meter-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 600px) {
+            .meter-grid {
+                grid-template-columns: repeat(2, 1fr); /* 手機端兩列呈現 */
+            }
+        }
+
+        .meter-card {
+            background-color: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 8px;
+            text-align: center;
+            font-family: monospace;
+            font-size: 15px;
+            font-weight: bold;
+        }
+
+        .meter-sub-info {
+            font-size: 10px;
+            color: #64748b;
+            margin-top: 2px;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>水表庫存分析</h1>
+        <p>請匯入５－６－３資料</p>
+    </header>
+
+    <div class="top-panels">
+        <div class="panel-card upload-section" id="drop-zone">
+            <div>
+                <label for="csv-file" class="file-input-label">手動匯入 / 切換 CSV</label>
+                <input type="file" id="csv-file" accept=".csv">
+                <div class="file-info" id="file-info">嘗試讀取預設 data.csv 中...</div>
+            </div>
+        </div>
+
+        <div class="panel-card control-panel">
+            <div class="tab-buttons">
+                <button class="tab-btn active" onclick="switchFilterMode('category')">依「類別」</button>
+                <button class="tab-btn" onclick="switchFilterMode('remark')">依「備註」</button>
+                <button class="tab-btn" onclick="switchFilterMode('storage')">庫位放置</button>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-item" id="filter-select-container">
+                    <label id="filter-label" for="filter-select">篩選類別：</label>
+                    <select id="filter-select" onchange="renderAnalysisTable()">
+                        <option value="">載入中...</option>
+                    </select>
+                </div>
+                <div class="control-item" id="year-mode-container">
+                    <label for="year-mode-select">分析模式：</label>
+                    <select id="year-mode-select" onchange="renderAnalysisTable()">
+                        <option value="meterYear" selected>表號代表年份 (A欄前三碼)</option>
+                        <option value="expiryYear">有效期限年份 (F欄)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard" id="dashboard">
+        <div class="results-section" id="main-table-view">
+            <div class="results-header">
+                <div class="results-title" id="table-title">統計結果</div>
+                <div class="stats-badge" id="total-count-badge">0 顆</div>
+            </div>
+            <div class="table-responsive" id="table-wrapper"></div>
+            <div style="font-size:11px; color:#e74c3c; margin-top:6px; text-align:right; font-weight:bold;" id="split-hint-msg"></div>
+        </div>
+
+        <div class="detail-view" id="detail-view">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <button class="btn-back" onclick="closeDetailView()">← 回統計表</button>
+                <div class="stats-badge" id="detail-count-badge">共 0 顆</div>
+            </div>
+            <div id="detail-content-wrapper"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const CALIBER_MAP = {
+        'A': '13', 'B': '20', 'C': '25', 'D': '40', 'E': '50',
+        'F': '75', 'G': '100', 'H': '150', 'I': '200', 'J': '250', 'K': '300'
+    };
+
+    let parsedRows = [];
+    let categories = new Set();
+    let remarks = new Set();
+    let currentMode = 'category'; 
+    let detailDataStore = {};
+
+    // 網頁載入時，自動嘗試讀取同目錄下的預設 data.csv 檔案
+    window.addEventListener('DOMContentLoaded', () => {
+        fetch('data.csv')
+            .then(response => {
+                if (!response.ok) throw new Error("無預設檔案");
+                return response.arrayBuffer();
+            })
+            .then(buffer => {
+                // 自動解碼（UTF-8 或 Big5）
+                let decoder = new TextDecoder('utf-8');
+                let text = decoder.decode(buffer);
+                if (text.includes('')) {
+                    decoder = new TextDecoder('big5');
+                    text = decoder.decode(buffer);
+                }
+                document.getElementById('file-info').textContent = "已自動讀取預設 data.csv";
+                processCSV(text);
+            })
+            .catch(err => {
+                document.getElementById('file-info').textContent = "請點擊上方按鈕選擇匯入 CSV 檔案";
+            });
+    });
+
+    document.getElementById('csv-file').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        document.getElementById('file-info').textContent = "已載入：" + file.name;
+        const reader = new FileReader();
+        reader.onload = (evt) => processCSV(evt.target.result);
+        reader.readAsText(file, 'UTF-8');
+    });
+
+    function processCSV(text) {
+        const lines = text.split(/\r?\n/);
+        if (lines.length < 3) return;
+
+        const headers = parseCSVLine(lines[2]).map(h => h.trim());
+        const meterNoIdx = headers.indexOf("表號");
+        const expiryIdx = headers.indexOf("有效期限");
+        const categoryIdx = headers.indexOf("類別");
+        const remarkIdx = headers.indexOf("備註");
+
+        if (meterNoIdx === -1 || expiryIdx === -1 || categoryIdx === -1 || remarkIdx === -1) {
+            alert("CSV 格式不符！請確保第三列包含【表號】、【有效期限】、【類別】與【備註】");
+            return;
+        }
+
+        parsedRows = [];
+        categories.clear();
+        remarks.clear();
+
+        for (let i = 3; i < lines.length; i++) {
+            if (!lines[i].trim()) continue;
+            const cells = parseCSVLine(lines[i]);
+            if (cells.length <= Math.max(meterNoIdx, expiryIdx, categoryIdx, remarkIdx)) continue; 
+
+            const meterNo = cells[meterNoIdx]?.trim() || ''; 
+            const expiry = cells[expiryIdx]?.trim() || '';  
+            const category = cells[categoryIdx]?.trim() || '未分類'; 
+            const remark = cells[remarkIdx]?.trim() || '無備註';   
+
+            let caliber = '未知';
+            const match = meterNo.match(/^\d{3}-([A-K])-\d{6}$/i) || meterNo.match(/-([A-K])-/i);
+            if (match) caliber = CALIBER_MAP[match[1].toUpperCase()] || '未知';
+
+            let expiryYear = expiry.length >= 3 && /^\d{3}$/.test(expiry.substring(0, 3)) ? expiry.substring(0, 3) + ' 年' : '未知年份';
+            let meterYear = '未知年份';
+            let serialNum = 0;
+
+            if (meterNo.length >= 3) {
+                const parts = meterNo.split('-');
+                if (parts[0] && /^\d{3}$/.test(parts[0].trim())) meterYear = parts[0].trim() + ' 年';
+                if (parts[2]) {
+                    const num = parseInt(parts[2].trim(), 10);
+                    if (!isNaN(num)) serialNum = num;
+                }
+            }
+
+            parsedRows.push({ meterNo, expiry, expiryYear, meterYear, serialNum, category, remark, caliber });
+            if (category) categories.add(category);
+            if (remark) remarks.add(remark);
+        }
+
+        document.getElementById('dashboard').style.display = 'block';
+        closeDetailView();
+        switchFilterMode(currentMode);
+    }
+
+    function parseCSVLine(line) {
+        const result = [];
+        let current = '', inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') inQuotes = !inQuotes;
+            else if (char === ',' && !inQuotes) { result.push(current); current = ''; }
+            else current += char;
+        }
+        result.push(current);
+        return result;
+    }
+
+    function switchFilterMode(mode) {
+        currentMode = mode;
+        closeDetailView();
+        
+        const buttons = document.querySelectorAll('.tab-btn');
+        buttons.forEach(btn => btn.classList.remove('active'));
+        
+        const filterContainer = document.getElementById('filter-select-container');
+        const yearModeContainer = document.getElementById('year-mode-container');
+
+        if (mode === 'category') {
+            buttons[0].classList.add('active');
+            document.getElementById('filter-label').textContent = '類別：';
+            filterContainer.style.display = 'flex';
+            yearModeContainer.style.display = 'flex';
+        } else if (mode === 'remark') {
+            buttons[1].classList.add('active');
+            document.getElementById('filter-label').textContent = '備註：';
+            filterContainer.style.display = 'flex';
+            yearModeContainer.style.display = 'flex';
+        } else if (mode === 'storage') {
+            buttons[2].classList.add('active');
+            filterContainer.style.display = 'none';
+            yearModeContainer.style.display = 'none';
+        }
+
+        if (mode !== 'storage') {
+            const select = document.getElementById('filter-select');
+            select.innerHTML = '';
+            const sourceSet = (mode === 'category') ? categories : remarks;
+            const sortedList = Array.from(sourceSet).sort();
+
+            const allOption = document.createElement('option');
+            allOption.value = '_ALL_';
+            allOption.textContent = "— 統計全部 —";
+            select.appendChild(allOption);
+
+            sortedList.forEach(item => {
+                if (!item.trim()) return;
+                const option = document.createElement('option');
+                option.value = item;
+                option.textContent = item;
+                select.appendChild(option);
+            });
+        }
+        renderAnalysisTable();
+    }
+
+    function makeLink(storeKey, normalRows, lostRows, filterType) {
+        let targetRows = filterType === 'all' ? normalRows.concat(lostRows) : (filterType === 'normal' ? normalRows : lostRows);
+        if (targetRows.length === 0) return '-';
+        const key = `${storeKey}_${filterType}`;
+        detailDataStore[key] = targetRows;
+        return `<span class="clickable-link" onclick="openDetailView('${key}')">${targetRows.length}</span>`;
+    }
+
+    function formatCellDisplayWithLink(storeKey, normalRows, lostRows, useFormatMode) {
+        if (normalRows.length === 0 && lostRows.length === 0) return '-';
+        if (useFormatMode) {
+            if (lostRows.length > 0) {
+                return `${makeLink(storeKey, normalRows, lostRows, 'normal')}+${makeLink(storeKey, normalRows, lostRows, 'lost')}`;
+            }
+            return makeLink(storeKey, normalRows, lostRows, 'normal');
+        }
+        return makeLink(storeKey, normalRows, lostRows, 'all');
+    }
+
+    function renderAnalysisTable() {
+        if (currentMode === 'storage') { renderStorageTable(); return; }
+
+        const select = document.getElementById('filter-select');
+        const selectedValue = select.value;
+        if (!selectedValue) return;
+
+        detailDataStore = {};
+        const yearField = document.getElementById('year-mode-select').value; 
+        const isAllMode = (selectedValue === '_ALL_');
+        const isRepairMode = (selectedValue && selectedValue.includes('待修表'));
+        
+        const hintMsg = document.getElementById('split-hint-msg');
+        if (isAllMode) hintMsg.textContent = "※ 格式「一般可用 + 遺失」（排除待報銷、待修）";
+        else if (isRepairMode) hintMsg.textContent = "※ 格式「一般待修 + 檢校」";
+        else hintMsg.textContent = "";
+
+        let filteredRows = isAllMode ? 
+            parsedRows.filter(r => r.category && !r.category.includes('待報銷') && !r.category.includes('待修表')) :
+            parsedRows.filter(r => (currentMode === 'category') ? (r.category === selectedValue) : (r.remark === selectedValue));
+
+        const sortedYears = Array.from(new Set(filteredRows.map(r => r[yearField]))).sort();
+        const standardCalibers = Object.values(CALIBER_MAP);
+        if (filteredRows.some(r => r.caliber === '未知')) standardCalibers.push('未知');
+
+        const counts = {};
+        standardCalibers.forEach(cal => {
+            counts[cal] = {};
+            sortedYears.forEach(yr => counts[cal][yr] = { normal: [], lost: [] });
+        });
+
+        let totalCount = 0;
+        filteredRows.forEach(row => {
+            const yr = row[yearField];
+            if (counts[row.caliber] && counts[row.caliber][yr]) {
+                if (isAllMode && row.remark && row.remark.includes('遺失')) counts[row.caliber][yr].lost.push(row);
+                else if (isRepairMode && row.remark && row.remark.includes('檢校')) counts[row.caliber][yr].lost.push(row);
+                else counts[row.caliber][yr].normal.push(row);
+                totalCount++;
+            }
+        });
+
+        document.getElementById('total-count-badge').textContent = totalCount + " 顆";
+        document.getElementById('table-title').textContent = (selectedValue === '_ALL_' ? '全部資料' : selectedValue);
+
+        if (filteredRows.length === 0) {
+            document.getElementById('table-wrapper').innerHTML = '<div class="alert">無符合資料</div>';
+            return;
+        }
+
+        const triggerFormat = (isAllMode || isRepairMode);
+        let tableHtml = `<table><thead><tr><th class="diagonal-header"><span class="top-right">年份</span><span class="bottom-left">口徑</span></th>`;
+        sortedYears.forEach(y => tableHtml += `<th style="text-align:right">${y}</th>`);
+        tableHtml += `<th style="text-align:right">合計</th></tr></thead><tbody>`;
+
+        const columnTotals = {};
+        sortedYears.forEach(yr => columnTotals[yr] = { normal: [], lost: [] });
+        let grandNormal = [], grandLost = [];
+
+        standardCalibers.forEach(caliber => {
+            let rowNormal = [], rowLost = [];
+            sortedYears.forEach(y => {
+                rowNormal = rowNormal.concat(counts[caliber][y].normal);
+                rowLost = rowLost.concat(counts[caliber][y].lost);
+            });
+            if (rowNormal.length === 0 && rowLost.length === 0) return;
+
+            let rowHtml = `<tr><td>${caliber}</td>`;
+            sortedYears.forEach(y => {
+                const cell = counts[caliber][y];
+                columnTotals[y].normal = columnTotals[y].normal.concat(cell.normal);
+                columnTotals[y].lost = columnTotals[y].lost.concat(cell.lost);
+                rowHtml += `<td style="text-align:right">${formatCellDisplayWithLink(`c_${caliber}_${y}`, cell.normal, cell.lost, triggerFormat)}</td>`;
+            });
+            rowHtml += `<td style="text-align:right"><strong>${formatCellDisplayWithLink(`r_${caliber}`, rowNormal, rowLost, triggerFormat)}</strong></td></tr>`;
+            tableHtml += rowHtml;
+            grandNormal = grandNormal.concat(rowNormal);
+            grandLost = grandLost.concat(rowLost);
+        });
+
+        tableHtml += `<tr style="background-color:#eaeded; font-weight:bold;"><td>總計</td>`;
+        sortedYears.forEach(y => tableHtml += `<td style="text-align:right">${formatCellDisplayWithLink(`col_${y}`, columnTotals[y].normal, columnTotals[y].lost, triggerFormat)}</td>`);
+        tableHtml += `<td style="text-align:right">${formatCellDisplayWithLink(`grand`, grandNormal, grandLost, triggerFormat)}</td></tr></tbody></table>`;
+
+        document.getElementById('table-wrapper').innerHTML = tableHtml;
+    }
+
+    function renderStorageTable() {
+        detailDataStore = {};
+        document.getElementById('split-hint-msg').textContent = "※ 庫位模式（排除待報銷、待修）";
+
+        const filteredRows = parsedRows.filter(r => r.category && !r.category.includes('待報銷') && !r.category.includes('待修表'));
+        const sortedExpiryYears = Array.from(new Set(filteredRows.map(r => r.expiryYear))).sort();
+        const rowKeysSet = new Set(filteredRows.map(r => `${r.caliber}__${r.meterYear}`));
+
+        const standardCalibers = Object.values(CALIBER_MAP);
+        const sortedRowKeys = Array.from(rowKeysSet).sort((a, b) => {
+            const [calA, yrA] = a.split('__'), [calB, yrB] = b.split('__');
+            let idxA = standardCalibers.indexOf(calA), idxB = standardCalibers.indexOf(calB);
+            if (idxA !== idxB) return idxA - idxB;
+            return yrA.localeCompare(yrB);
+        });
+
+        const counts = {};
+        sortedRowKeys.forEach(rk => { counts[rk] = {}; sortedExpiryYears.forEach(ey => counts[rk][ey] = []); });
+
+        let totalCount = 0;
+        filteredRows.forEach(r => {
+            const rk = `${r.caliber}__${r.meterYear}`;
+            if (counts[rk] && counts[rk][r.expiryYear]) { counts[rk][r.expiryYear].push(r); totalCount++; }
+        });
+
+        document.getElementById('total-count-badge').textContent = totalCount + " 顆";
+        document.getElementById('table-title').textContent = "庫位放置分析";
+
+        if (filteredRows.length === 0) {
+            document.getElementById('table-wrapper').innerHTML = '<div class="alert">無符合資料</div>';
+            return;
+        }
+
+        let tableHtml = `<table><thead><tr><th class="diagonal-header"><span class="top-right">有效年</span><span class="bottom-left">口徑(表號年)</span></th>`;
+        sortedExpiryYears.forEach(ey => tableHtml += `<th style="text-align:right">${ey}</th>`);
+        tableHtml += `<th style="text-align:right">合計</th></tr></thead><tbody>`;
+
+        const columnTotals = {};
+        sortedExpiryYears.forEach(ey => columnTotals[ey] = []);
+        let grandTotal = [];
+
+        sortedRowKeys.forEach(rk => {
+            const [caliber, meterYr] = rk.split('__');
+            let rowRows = [];
+            sortedExpiryYears.forEach(ey => rowRows = rowRows.concat(counts[rk][ey]));
+            if (rowRows.length === 0) return;
+
+            let rowHtml = `<tr><td>${caliber} <span style="font-size:12px; color:#7f8c8d;">(${meterYr})</span></td>`;
+            sortedExpiryYears.forEach(ey => {
+                const cell = counts[rk][ey];
+                columnTotals[ey] = columnTotals[ey].concat(cell);
+                rowHtml += `<td style="text-align:right">${makeLink(`st_${rk}_${ey}`, cell, [], 'all')}</td>`;
+            });
+            rowHtml += `<td style="text-align:right"><strong>${makeLink(`st_row_${rk}`, rowRows, [], 'all')}</strong></td></tr>`;
+            tableHtml += rowHtml;
+            grandTotal = grandTotal.concat(rowRows);
+        });
+
+        tableHtml += `<tr style="background-color:#eaeded; font-weight:bold;"><td>總計</td>`;
+        sortedExpiryYears.forEach(ey => tableHtml += `<td style="text-align:right">${makeLink(`st_col_${ey}`, columnTotals[ey], [], 'all')}</td>`);
+        tableHtml += `<td style="text-align:right">${makeLink(`st_grand`, grandTotal, [], 'all')}</td></tr></tbody></table>`;
+
+        document.getElementById('table-wrapper').innerHTML = tableHtml;
+    }
+
+    function openDetailView(dataKey) {
+        const rows = detailDataStore[dataKey];
+        if (!rows || rows.length === 0) return;
+
+        const sortedRows = [...rows].sort((a, b) => a.serialNum !== b.serialNum ? a.serialNum - b.serialNum : a.meterNo.localeCompare(b.meterNo));
+
+        document.getElementById('main-table-view').style.display = 'none';
+        document.getElementById('detail-view').style.display = 'block';
+        document.getElementById('detail-count-badge').textContent = `共 ${sortedRows.length} 顆`;
+
+        let gridHtml = `<div class="meter-grid">`;
+        sortedRows.forEach(row => {
+            gridHtml += `
+                <div class="meter-card">
+                    <div>${row.meterNo}</div>
+                    <div class="meter-sub-info">
+                        <span>口徑:${row.caliber}</span>
+                        <span>${row.category}</span>
+                        <span>${row.remark}</span>
+                    </div>
+                </div>`;
+        });
+        gridHtml += `</div>`;
+        document.getElementById('detail-content-wrapper').innerHTML = gridHtml;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function closeDetailView() {
+        document.getElementById('detail-view').style.display = 'none';
+        document.getElementById('main-table-view').style.display = 'block';
+    }
+</script>
+
+</body>
+</html>
