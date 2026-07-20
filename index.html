@@ -387,6 +387,12 @@
     let currentMode = 'category'; 
     let detailDataStore = {};
 
+    // 檢查字串是否包含中文亂碼的常見符號（如 FFFD 替換字元）
+    function isGarbled(str) {
+        return /[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(str);
+    }
+
+    // 網頁載入時，嘗試以 Big5/ANSI 優先讀取預設 data.csv
     window.addEventListener('DOMContentLoaded', () => {
         fetch('data.csv')
             .then(response => {
@@ -394,12 +400,16 @@
                 return response.arrayBuffer();
             })
             .then(buffer => {
-                let decoder = new TextDecoder('utf-8');
+                // 優先使用 Big5 / CP950（水務系統最常匯出的編碼）
+                let decoder = new TextDecoder('big5');
                 let text = decoder.decode(buffer);
-                if (text.includes('')) {
-                    decoder = new TextDecoder('big5');
+                
+                // 如果 Big5 解出來有異常或未定義字元，再切換成 UTF-8
+                if (isGarbled(text)) {
+                    decoder = new TextDecoder('utf-8');
                     text = decoder.decode(buffer);
                 }
+                
                 document.getElementById('file-info').textContent = "已自動讀取預設 data.csv";
                 processCSV(text);
             })
@@ -408,23 +418,26 @@
             });
     });
 
+    // 手動選擇檔案時的雙重編碼自動偵測機制
     document.getElementById('csv-file').addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
         document.getElementById('file-info').textContent = "已載入：" + file.name;
         
-        const reader = new FileReader();
-        reader.onload = function(evt) {
+        // 優先嘗試以 Big5 讀取
+        const big5Reader = new FileReader();
+        big5Reader.onload = function(evt) {
             const text = evt.target.result;
-            if (text.includes('')) {
-                const big5Reader = new FileReader();
-                big5Reader.onload = (bEvt) => processCSV(bEvt.target.result);
-                big5Reader.readAsText(file, 'Big5');
+            if (isGarbled(text)) {
+                // 若 Big5 出現亂碼，則改以 UTF-8 重新讀取
+                const utf8Reader = new FileReader();
+                utf8Reader.onload = (uEvt) => processCSV(utf8Reader.result);
+                utf8Reader.readAsText(file, 'UTF-8');
             } else {
                 processCSV(text);
             }
         };
-        reader.readAsText(file, 'UTF-8');
+        big5Reader.readAsText(file, 'Big5');
     });
 
     function processCSV(text) {
@@ -437,7 +450,7 @@
         // 解析第三列標題
         const headers = parseCSVLine(lines[2]).map(h => h.trim());
         
-        // 彈性搜尋標題索引，若找不到則採用預設位置 (0:表號, 5:有效期限, 6:類別, 9:備註)
+        // 彈性搜尋標題索引
         let meterNoIdx = headers.findIndex(h => h.includes("表"));
         let expiryIdx = headers.findIndex(h => h.includes("期限") || h.includes("有效"));
         let categoryIdx = headers.findIndex(h => h.includes("類"));
@@ -581,7 +594,7 @@
         const isRepairMode = (selectedValue && selectedValue.includes('待修表'));
         
         const hintMsg = document.getElementById('split-hint-msg');
-        if (isAllMode) hintMsg.textContent = "※ 格式「一般可用 + 遺失」（已排除待報銷、待修）";
+        if (isAllMode) hintMsg.textContent = "※ 格式「一般可用 + 遺失」（排除待報銷、待修）";
         else if (isRepairMode) hintMsg.textContent = "※ 格式「一般待修 + 檢校」";
         else hintMsg.textContent = "";
 
