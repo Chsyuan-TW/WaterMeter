@@ -387,12 +387,10 @@
     let currentMode = 'category'; 
     let detailDataStore = {};
 
-    // 檢查字串是否包含中文亂碼的常見符號（如 FFFD 替換字元）
     function isGarbled(str) {
         return /[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(str);
     }
 
-    // 網頁載入時，嘗試以 Big5/ANSI 優先讀取預設 data.csv
     window.addEventListener('DOMContentLoaded', () => {
         fetch('data.csv')
             .then(response => {
@@ -400,16 +398,12 @@
                 return response.arrayBuffer();
             })
             .then(buffer => {
-                // 優先使用 Big5 / CP950（水務系統最常匯出的編碼）
                 let decoder = new TextDecoder('big5');
                 let text = decoder.decode(buffer);
-                
-                // 如果 Big5 解出來有異常或未定義字元，再切換成 UTF-8
                 if (isGarbled(text)) {
                     decoder = new TextDecoder('utf-8');
                     text = decoder.decode(buffer);
                 }
-                
                 document.getElementById('file-info').textContent = "已自動讀取預設 data.csv";
                 processCSV(text);
             })
@@ -418,18 +412,15 @@
             });
     });
 
-    // 手動選擇檔案時的雙重編碼自動偵測機制
     document.getElementById('csv-file').addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
         document.getElementById('file-info').textContent = "已載入：" + file.name;
         
-        // 優先嘗試以 Big5 讀取
         const big5Reader = new FileReader();
         big5Reader.onload = function(evt) {
             const text = evt.target.result;
             if (isGarbled(text)) {
-                // 若 Big5 出現亂碼，則改以 UTF-8 重新讀取
                 const utf8Reader = new FileReader();
                 utf8Reader.onload = (uEvt) => processCSV(utf8Reader.result);
                 utf8Reader.readAsText(file, 'UTF-8');
@@ -447,10 +438,8 @@
             return;
         }
 
-        // 解析第三列標題
         const headers = parseCSVLine(lines[2]).map(h => h.trim());
         
-        // 彈性搜尋標題索引
         let meterNoIdx = headers.findIndex(h => h.includes("表"));
         let expiryIdx = headers.findIndex(h => h.includes("期限") || h.includes("有效"));
         let categoryIdx = headers.findIndex(h => h.includes("類"));
@@ -474,10 +463,14 @@
             const category = cells[categoryIdx]?.trim() || '未分類'; 
             const remark = cells[remarkIdx]?.trim() || '無備註';   
 
-            let caliber = '未知';
-            const match = meterNo.match(/^\d{3}-([A-K])-\d{6}$/i) || meterNo.match(/-([A-K])-/i);
-            if (match) caliber = CALIBER_MAP[match[1].toUpperCase()] || '未知';
+            // 📌 核心防呆過濾：檢查表號是否符合水表格式 (必須包含字母 A~K)，若為「總數量」、「合計」或非水表格式則自動跳過
+            const meterMatch = meterNo.match(/^\d{3}-([A-K])-\d{6}$/i) || meterNo.match(/-([A-K])-/i);
+            if (!meterMatch) {
+                // 不符合正規水表格式（例如末列的總計行），不納入數據分析
+                continue;
+            }
 
+            let caliber = CALIBER_MAP[meterMatch[1].toUpperCase()] || '未知';
             let expiryYear = expiry.length >= 3 && /^\d{3}$/.test(expiry.substring(0, 3)) ? expiry.substring(0, 3) + ' 年' : '未知年份';
             let meterYear = '未知年份';
             let serialNum = 0;
