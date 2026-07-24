@@ -311,6 +311,15 @@
             display: flex;
             justify-content: space-between;
         }
+
+        .alert {
+            padding: 12px;
+            background-color: #fcf8e3;
+            border: 1px solid #faebcc;
+            color: #8a6d3b;
+            border-radius: 4px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -463,12 +472,9 @@
             const category = cells[categoryIdx]?.trim() || '未分類'; 
             const remark = cells[remarkIdx]?.trim() || '無備註';   
 
-            // 📌 核心防呆過濾：檢查表號是否符合水表格式 (必須包含字母 A~K)，若為「總數量」、「合計」或非水表格式則自動跳過
+            // 📌 核心防呆過濾：驗證水表編號格式，排除頁尾統計列與非水表文字
             const meterMatch = meterNo.match(/^\d{3}-([A-K])-\d{6}$/i) || meterNo.match(/-([A-K])-/i);
-            if (!meterMatch) {
-                // 不符合正規水表格式（例如末列的總計行），不納入數據分析
-                continue;
-            }
+            if (!meterMatch) continue;
 
             let caliber = CALIBER_MAP[meterMatch[1].toUpperCase()] || '未知';
             let expiryYear = expiry.length >= 3 && /^\d{3}$/.test(expiry.substring(0, 3)) ? expiry.substring(0, 3) + ' 年' : '未知年份';
