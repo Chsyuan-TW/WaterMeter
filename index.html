@@ -343,7 +343,7 @@
             <div class="tab-buttons">
                 <button class="tab-btn active" onclick="switchFilterMode('category')">依「類別」</button>
                 <button class="tab-btn" onclick="switchFilterMode('remark')">依「備註」</button>
-                <button class="tab-btn" onclick="switchFilterMode('storage')">庫位放置</button>
+                <button class="tab-btn" onclick="switchFilterMode('storage')">存放位置</button>
             </div>
             
             <div class="control-group">
@@ -472,7 +472,6 @@
             const category = cells[categoryIdx]?.trim() || '未分類'; 
             const remark = cells[remarkIdx]?.trim() || '無備註';   
 
-            // 📌 核心防呆過濾：驗證水表編號格式，排除頁尾統計列與非水表文字
             const meterMatch = meterNo.match(/^\d{3}-([A-K])-\d{6}$/i) || meterNo.match(/-([A-K])-/i);
             if (!meterMatch) continue;
 
@@ -522,29 +521,16 @@
         
         const filterContainer = document.getElementById('filter-select-container');
         const yearModeContainer = document.getElementById('year-mode-container');
+        const select = document.getElementById('filter-select');
 
         if (mode === 'category') {
             buttons[0].classList.add('active');
             document.getElementById('filter-label').textContent = '類別：';
             filterContainer.style.display = 'flex';
             yearModeContainer.style.display = 'flex';
-        } else if (mode === 'remark') {
-            buttons[1].classList.add('active');
-            document.getElementById('filter-label').textContent = '備註：';
-            filterContainer.style.display = 'flex';
-            yearModeContainer.style.display = 'flex';
-        } else if (mode === 'storage') {
-            buttons[2].classList.add('active');
-            filterContainer.style.display = 'none';
-            yearModeContainer.style.display = 'none';
-        }
 
-        if (mode !== 'storage') {
-            const select = document.getElementById('filter-select');
             select.innerHTML = '';
-            const sourceSet = (mode === 'category') ? categories : remarks;
-            const sortedList = Array.from(sourceSet).sort();
-
+            const sortedList = Array.from(categories).sort();
             const allOption = document.createElement('option');
             allOption.value = '_ALL_';
             allOption.textContent = "— 統計全部 —";
@@ -557,7 +543,48 @@
                 option.textContent = item;
                 select.appendChild(option);
             });
+
+        } else if (mode === 'remark') {
+            buttons[1].classList.add('active');
+            document.getElementById('filter-label').textContent = '備註：';
+            filterContainer.style.display = 'flex';
+            yearModeContainer.style.display = 'flex';
+
+            select.innerHTML = '';
+            const sortedList = Array.from(remarks).sort();
+            const allOption = document.createElement('option');
+            allOption.value = '_ALL_';
+            allOption.textContent = "— 統計全部 —";
+            select.appendChild(allOption);
+
+            sortedList.forEach(item => {
+                if (!item.trim()) return;
+                const option = document.createElement('option');
+                option.value = item;
+                option.textContent = item;
+                select.appendChild(option);
+            });
+
+        } else if (mode === 'storage') {
+            // 📌 同步電腦版：存放位置顯示選單「堪用表 (扣除賠表)」與「待修表 (扣除送檢表)」
+            buttons[2].classList.add('active');
+            document.getElementById('filter-label').textContent = '存放類別：';
+            filterContainer.style.display = 'flex';
+            yearModeContainer.style.display = 'none';
+
+            select.innerHTML = '';
+            
+            const usableOpt = document.createElement('option');
+            usableOpt.value = '堪用表';
+            usableOpt.textContent = '堪用表 (扣除賠表)';
+            select.appendChild(usableOpt);
+
+            const repairOpt = document.createElement('option');
+            repairOpt.value = '待修表';
+            repairOpt.textContent = '待修表 (扣除送檢表)';
+            select.appendChild(repairOpt);
         }
+
         renderAnalysisTable();
     }
 
@@ -667,11 +694,33 @@
         document.getElementById('table-wrapper').innerHTML = tableHtml;
     }
 
+    // 📌 存放位置分析邏輯 (完全同步電腦版扣除邏輯)
     function renderStorageTable() {
         detailDataStore = {};
-        document.getElementById('split-hint-msg').textContent = "※ 庫位模式（已排除待報銷、待修表）";
+        const select = document.getElementById('filter-select');
+        const storageType = select.value || '堪用表';
 
-        const filteredRows = parsedRows.filter(r => r.category && !r.category.includes('待報銷') && !r.category.includes('待修表'));
+        const hintMsg = document.getElementById('split-hint-msg');
+
+        let filteredRows = [];
+        if (storageType === '堪用表') {
+            hintMsg.textContent = "※ 【堪用表 (扣除賠表)】已排除待報銷、待修表，並扣除備註『遺失』";
+            // 堪用表：排除待報銷、待修表，且扣除備註包含遺失之資料
+            filteredRows = parsedRows.filter(row => {
+                const isNotScrapOrRepair = row.category && !row.category.includes('待報銷') && !row.category.includes('待修表');
+                const isNotLost = !row.remark || !row.remark.includes('遺失');
+                return isNotScrapOrRepair && isNotLost;
+            });
+        } else {
+            hintMsg.textContent = "※ 【待修表 (扣除送檢表)】僅分析類別『待修表』，並扣除備註『檢校』";
+            // 待修表：僅分析類別包含待修表，且扣除備註包含檢校之資料
+            filteredRows = parsedRows.filter(row => {
+                const isRepairCategory = row.category && row.category.includes('待修表');
+                const isNotCalib = !row.remark || !row.remark.includes('檢校');
+                return isRepairCategory && isNotCalib;
+            });
+        }
+
         const sortedExpiryYears = Array.from(new Set(filteredRows.map(r => r.expiryYear))).sort();
         const rowKeysSet = new Set(filteredRows.map(r => `${r.caliber}__${r.meterYear}`));
 
@@ -693,7 +742,7 @@
         });
 
         document.getElementById('total-count-badge').textContent = totalCount + " 顆";
-        document.getElementById('table-title').textContent = "庫位放置分析";
+        document.getElementById('table-title').textContent = `存放位置 (${storageType === '堪用表' ? '堪用表-扣賠表' : '待修表-扣送檢'})`;
 
         if (filteredRows.length === 0) {
             document.getElementById('table-wrapper').innerHTML = '<div class="alert">無符合資料</div>';
